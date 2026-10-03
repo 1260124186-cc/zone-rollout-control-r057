@@ -226,6 +226,7 @@ ready --lease--> leased --report--> ready
 | domain | `internal/domain` | 聚合、值校验、状态迁移和纯计算 |
 | store | `internal/store` | 锁内副本事务和原子 JSON 持久化 |
 | platform | `internal/platform` | 时钟、标识、游标和文件锁 |
+| verify | `internal/verify`、`cmd/zrcverify` | 离线快照完整性检查（只读） |
 | runtime-probe | `internal/workflowprobe`, `cmd/workflowprobe` | 真实 HTTP 路径验证 |
 
 依赖方向：入口和 HTTP 层依赖应用服务；应用服务依赖领域规则和存储；领域包不依赖 HTTP、文件系统或网络。
@@ -271,6 +272,7 @@ ready --lease--> leased --report--> ready
 - 错误传播：领域错误稳定映射到 HTTP 状态和错误代码。
 - 边界校验：DNS 名称、IP、序列号、延迟、比例、分页和能力均显式验证。
 - 并发入口：HTTP 处理器可并发运行，状态修改通过互斥锁串行化。
+- 离线校验：`zrcverify` 只读扫描快照，按稳定顺序检查实体引用、状态约束、请求索引、计数与摘要，输出机器可读报告和退出状态；扫描有界且可取消，不修复也不替换原文件。
 
 这些机制为后续工程任务提供了多个独立行为面，但本阶段不创建缺陷、不写测试，也不生成缺陷票据。
 
@@ -284,3 +286,5 @@ ready --lease--> leased --report--> ready
 4. 一致性通过、审核触发、最新结果查询和幂等重放。
 
 每条探针使用独立临时目录，不访问外部网络，结束后关闭服务。
+
+交付前另需用 `go run ./cmd/zrcverify --state <快照>` 对真实运行产生的快照做离线完整性检查：干净快照退出码为 0，人为损坏的引用、状态、索引或摘要必须产生稳定排序的问题列表和退出码 1，重复运行结果一致。

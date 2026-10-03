@@ -36,6 +36,7 @@ go run ./cmd/zrc \
 
 ```text
 cmd/zrc                     服务进程入口
+cmd/zrcverify               离线快照完整性检查入口
 cmd/workflowprobe           工作流探针入口
 internal/domain             聚合、DNS 值校验、状态迁移和判定计算
 internal/store              锁内副本事务和原子 JSON 持久化
@@ -46,6 +47,7 @@ internal/allocation         节点选择和租约生命周期
 internal/probe              探针登记、幂等重放和租约完成
 internal/assessment         一致性聚合和最新结果查询
 internal/httpapi            HTTP 路由、中间件和响应映射
+internal/verify             快照引用、状态、请求索引与摘要的只读校验
 internal/workflowprobe      真实 HTTP 路径验证
 ```
 
@@ -135,6 +137,23 @@ curl -sS -X PATCH http://127.0.0.1:8090/v1/plans/<plan_id>/assessments \
   -d '{"request_key": "assess-request-0001"}'
 ```
 
+## 离线完整性检查
+
+`zrcverify` 在变更前对快照做全量只读校验，发现启动和业务读取只能 lazy 发现的断链与不闭合：
+
+```bash
+go run ./cmd/zrcverify --state data/zrc-state.json
+```
+
+行为约定：
+
+- 只读：不锁定、不创建、不修改、不替换快照文件，服务运行期间也可执行。
+- 按稳定顺序检查：结构形态、实体引用、状态约束、请求索引、计数与摘要。
+- 输出机器可读 JSON 报告，包含 `counts` 和稳定排序的 `problems` 列表；重复运行同一文件结果与问题顺序完全一致。
+- 退出码：`0` 表示一致，`1` 表示发现完整性问题，`2` 表示检查未完成（文件不可读、超出限制、解码失败或被取消）。
+- 有界扫描：`--max-bytes` 限制可读取的快照大小，`--max-problems` 限制收集的问题数量（超出时报告 `truncated: true`），`--timeout` 限制整体耗时；`SIGINT`/`SIGTERM` 可随时取消，取消时仍输出部分报告。
+- `--compact` 以单行 JSON 输出报告。
+
 ## API 概览
 
 成功响应：
@@ -219,3 +238,9 @@ go run ./cmd/workflowprobe consistency-assessment
 ```
 
 探针不访问外部网络，也不依赖已有状态文件。
+
+以下命令对已有快照做离线完整性检查，报告引用、状态、索引与摘要问题：
+
+```bash
+go run ./cmd/zrcverify --state data/zrc-state.json
+```

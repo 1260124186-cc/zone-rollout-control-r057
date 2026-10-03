@@ -249,6 +249,18 @@ func ValidateAssessmentInput(input AssessmentInput) error {
 	return nil
 }
 
+// IsCanonicalName reports whether value is a valid name already stored in
+// canonical form (trimmed, lowercased, without a trailing dot).
+func IsCanonicalName(value string) bool {
+	return value == canonicalName(value) && validateCanonicalName(value) == nil
+}
+
+// IsValidRequestKey reports whether value satisfies the request key
+// constraints enforced on write.
+func IsValidRequestKey(value string) bool {
+	return validateRequestKey(value) == nil
+}
+
 func validateRequestKey(value string) error {
 	count := utf8.RuneCountInString(value)
 	if count < MinRequestKeyRunes || count > MaxRequestKeyRunes {
