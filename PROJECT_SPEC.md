@@ -226,6 +226,7 @@ ready --lease--> leased --report--> ready
 | domain | `internal/domain` | 聚合、值校验、状态迁移和纯计算 |
 | store | `internal/store` | 锁内副本事务和原子 JSON 持久化 |
 | platform | `internal/platform` | 时钟、标识、游标和文件锁 |
+| snapshot-check | `internal/snapshotcheck`, `cmd/zrc-check` | 只读离线快照完整性检查和机器可读报告 |
 | runtime-probe | `internal/workflowprobe`, `cmd/workflowprobe` | 真实 HTTP 路径验证 |
 
 依赖方向：入口和 HTTP 层依赖应用服务；应用服务依赖领域规则和存储；领域包不依赖 HTTP、文件系统或网络。
@@ -268,6 +269,7 @@ ready --lease--> leased --report--> ready
 - 幂等写入：租约分配和探针登记都保存请求键和载荷指纹。
 - 资源生命周期：租约带截止时间，支持释放、完成和过期清理。
 - 原子持久化：事务先复制状态，成功后再通过临时文件替换快照。
+- 离线完整性：`zrc-check` 只读扫描快照，按稳定顺序验证实体引用、状态约束、请求索引、计数与摘要，输出机器可读问题列表和退出状态；扫描有界、可取消，重复运行结果稳定。
 - 错误传播：领域错误稳定映射到 HTTP 状态和错误代码。
 - 边界校验：DNS 名称、IP、序列号、延迟、比例、分页和能力均显式验证。
 - 并发入口：HTTP 处理器可并发运行，状态修改通过互斥锁串行化。

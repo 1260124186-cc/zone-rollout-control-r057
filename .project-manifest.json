@@ -54,6 +54,11 @@
       "responsibility": "clock, identifiers, cursors, and process locking"
     },
     {
+      "id": "snapshot-check",
+      "path": "internal/snapshotcheck",
+      "responsibility": "read-only offline snapshot integrity checks with stable machine-readable reports"
+    },
+    {
       "id": "runtime-probe",
       "path": "internal/workflowprobe",
       "responsibility": "bounded workflow verification through real HTTP handlers"

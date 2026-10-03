@@ -32,10 +32,63 @@ go run ./cmd/zrc \
 
 服务会锁定 `<state>.lock`，避免两个进程同时修改同一份状态。每次成功事务先复制状态，再通过同目录临时文件和原子替换写入快照。
 
+## 离线完整性检查
+
+`zrc-check` 在不启动服务的情况下全量验证一份状态快照，帮助在变更前发现计划、版本、节点、租约、探针、判定和幂等索引之间的断链与不闭合：
+
+```bash
+go run ./cmd/zrc-check --state data/zrc-state.json
+```
+
+参数：
+
+- `--state`：待验证的快照路径，默认 `data/zrc-state.json`。文件只被读取，不会被创建、锁定、修改或替换，也不要求服务停止（快照通过原子替换写入，读取永远看到完整版本）。
+- `--max-problems`：收集的问题上限，达到后停止扫描并标记 `truncated`，默认 `1000`，设为 `0` 表示不限制。
+- `--timeout`：扫描超时时间，超时后按取消处理，默认 `0` 表示不限制。运行中收到 `SIGINT` 或 `SIGTERM` 同样取消扫描。
+
+检查按稳定顺序分四组执行：`entity_references`（实体引用闭合）、`state_constraints`（状态机与取值约束）、`request_indexes`（租约与判定幂等索引双向一致）、`counts_and_summaries`（派生计数与计划摘要指针）。所有集合按键排序遍历，报告中不含时间戳或随机值，因此对同一文件重复运行的结果和问题顺序完全一致。
+
+报告为机器可读 JSON，包含总体状态、各集合计数、每组检查结果和问题列表：
+
+```json
+{
+  "status": "issues_found",
+  "state_path": "data/zrc-state.json",
+  "schema_version": 1,
+  "revision": 12,
+  "counts": {"plans": 1, "entities_scanned": 63},
+  "checks": [{"name": "entity_references", "completed": true, "problems": 1}],
+  "problem_count": 1,
+  "problems": [
+    {
+      "check": "entity_references",
+      "code": "missing_reference",
+      "entity": "lease",
+      "entity_id": "lse_...",
+      "field": "plan_id",
+      "message": "lease references a missing plan",
+      "details": {"referenced_id": "pln_..."}
+    }
+  ],
+  "truncated": false,
+  "canceled": false
+}
+```
+
+退出状态：
+
+- `0`：快照一致，未发现问题。
+- `1`：发现完整性问题（`status` 为 `issues_found`，可能伴随 `truncated`）。
+- `2`：运行失败（参数错误、文件不可读或无法解码，`status` 为 `error`）。
+- `3`：扫描在完成前被取消（信号或超时，`status` 为 `canceled`，已发现的问题仍会列出）。
+
+检查器只报告问题，不做任何修复；所有规则都是快照的纯函数，不依赖当前时间，因此过期租约等时间相关状态不会被误报。
+
 ## 目录结构
 
 ```text
 cmd/zrc                     服务进程入口
+cmd/zrc-check               离线快照完整性检查入口
 cmd/workflowprobe           工作流探针入口
 internal/domain             聚合、DNS 值校验、状态迁移和判定计算
 internal/store              锁内副本事务和原子 JSON 持久化
@@ -46,6 +99,7 @@ internal/allocation         节点选择和租约生命周期
 internal/probe              探针登记、幂等重放和租约完成
 internal/assessment         一致性聚合和最新结果查询
 internal/httpapi            HTTP 路由、中间件和响应映射
+internal/snapshotcheck      只读快照完整性扫描
 internal/workflowprobe      真实 HTTP 路径验证
 ```
 
